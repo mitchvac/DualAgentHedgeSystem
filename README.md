@@ -1,16 +1,16 @@
 # DualAgentHedgeSystem
 
-A full-stack crypto hedge trading platform with dual AI agents, real-time arbitrage detection, and portfolio analytics.
+A full-stack crypto hedge trading platform with dual AI agents, real-time arbitrage detection, portfolio analytics, and multi-exchange support.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | React 18 + Vite + Tailwind CSS + Recharts |
-| **Backend** | FastAPI + LangGraph + SQLite (PostgreSQL migration in progress) |
-| **Auth** | Supabase Auth (email/password + GitHub OAuth) |
-| **Database** | Supabase PostgreSQL with RLS |
-| **Deploy** | Vercel (frontend) + Railway/Render/Fly.io (backend) |
+| **Frontend** | React 18 + Vite + Tailwind CSS + Recharts + RainbowKit |
+| **Backend** | FastAPI + LangGraph + SQLite |
+| **Auth** | Self-hosted JWT (local username/password + Google/GitHub/Facebook OAuth) |
+| **Database** | SQLite with per-user isolation (user_id on all tables) |
+| **Wallet** | RainbowKit + wagmi (MetaMask, WalletConnect, Coinbase Wallet) |
 
 ## Quick Start
 
@@ -32,7 +32,24 @@ cd frontend && npm install
 
 ```bash
 cp .env.example .env
-# Edit .env with your Supabase credentials
+# Edit .env with your credentials
+```
+
+Required env vars:
+```bash
+JWT_SECRET_KEY=your-secret-key
+ADMIN_USER=admin
+ADMIN_PASSWORD=admin
+```
+
+Optional — for social login:
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+FACEBOOK_CLIENT_ID=...
+FACEBOOK_CLIENT_SECRET=...
 ```
 
 ### 3. Run Locally
@@ -52,19 +69,21 @@ cd frontend && npm run dev
 - **Portfolio & Analytics** — Real-time PnL, equity curves, risk metrics
 - **Agent Leaderboard** — Performance ranking with voting
 - **Risk Dashboard** — VaR, drawdown, leverage monitoring
-- **Iron-Clad RLS** — Every table has `user_id` + PostgreSQL RLS policies
-
-## Deployment
-
-See [docs/DEPLOY.md](docs/DEPLOY.md) for Vercel + Supabase deployment.
+- **Wallet Connect** — Connect MetaMask/WalletConnect to view balances
+- **Social Login** — Google, GitHub, Facebook OAuth
+- **Per-User Data Isolation** — Every table has `user_id`, all queries are scoped
 
 ## Auth
 
-The app uses **Supabase Auth**:
-- Email/password registration & login
-- GitHub OAuth (configure in Supabase dashboard)
-- JWT tokens automatically refreshed
-- Iron-clad row-level security on all data
+The app uses **self-hosted JWT auth**:
+- Username/password registration & login
+- Google, GitHub, Facebook OAuth (optional)
+- JWT tokens stored in `localStorage`
+- Iron-clad row-level isolation on all data via `user_id`
+
+## Deployment
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for Vercel + backend deployment.
 
 ## License
 
