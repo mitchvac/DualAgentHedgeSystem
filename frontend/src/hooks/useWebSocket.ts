@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { WSMessage, Trade, DefenseStatus, Agent, Position, SwarmConsensus } from '@/types'
-import { getAuthToken } from '@/lib/supabase'
-
 export function useWebSocket() {
   const [connected, setConnected] = useState(false)
   const [trades, setTrades] = useState<Trade[]>([])
@@ -15,7 +13,7 @@ export function useWebSocket() {
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
-    const token = await getAuthToken()
+    const token = localStorage.getItem('hedgeswarm_token')
     if (!token) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'

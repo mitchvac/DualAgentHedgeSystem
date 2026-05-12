@@ -4,12 +4,10 @@ import type {
   Settings, Position, MarketSnapshot, SwarmConsensus, ExchangeDepth,
   ExchangeBalance, ExchangePosition,
 } from '@/types'
-import { getAuthToken } from '@/lib/supabase'
-
 const API_BASE = '/api'
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const token = await getAuthToken()
+  const token = localStorage.getItem('hedgeswarm_token')
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options?.headers as Record<string, string> || {}),

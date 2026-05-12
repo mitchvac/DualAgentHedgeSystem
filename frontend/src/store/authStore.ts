@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
 
 interface AuthState {
   token: string | null
@@ -23,40 +22,35 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token, userId, username, email, isLoading: false })
   },
 
-  logout: async () => {
-    await supabase.auth.signOut()
+  logout: () => {
+    localStorage.removeItem('hedgeswarm_token')
     set({ token: null, userId: null, username: null, email: null, isLoading: false })
     window.location.href = '/login'
   },
 
   init: async () => {
-    // Listen to auth state changes
-    supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        set({
-          token: session.access_token,
-          userId: session.user.id,
-          username: session.user.user_metadata?.username || session.user.email || '',
-          email: session.user.email || '',
-          isLoading: false,
+    const token = localStorage.getItem('hedgeswarm_token')
+    if (token) {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
         })
-      } else {
-        set({ token: null, userId: null, username: null, email: null, isLoading: false })
+        if (res.ok) {
+          const data = await res.json()
+          set({
+            token,
+            userId: data.username,
+            username: data.username,
+            email: '',
+            isLoading: false,
+          })
+          return
+        }
+      } catch {
+        // fall through
       }
-    })
-
-    // Check existing session
-    const { data } = await supabase.auth.getSession()
-    if (data.session) {
-      set({
-        token: data.session.access_token,
-        userId: data.session.user.id,
-        username: data.session.user.user_metadata?.username || data.session.user.email || '',
-        email: data.session.user.email || '',
-        isLoading: false,
-      })
-    } else {
-      set({ isLoading: false })
+      localStorage.removeItem('hedgeswarm_token')
     }
+    set({ isLoading: false })
   },
 }))
