@@ -4,22 +4,20 @@ import type {
   Settings, Position, MarketSnapshot, SwarmConsensus, ExchangeDepth,
   ExchangeBalance, ExchangePosition,
 } from '@/types'
+import { getAuthToken } from '@/lib/supabase'
 
 const API_BASE = '/api'
 
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('hedgeswarm_token')
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...getAuthHeaders(),
-      ...(options?.headers || {}),
-    },
-  })
+  const token = await getAuthToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> || {}),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const res = await fetch(url, { ...options, headers })
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`HTTP ${res.status}: ${body || res.statusText}`)

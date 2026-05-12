@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { TrendingUp, Lock, User, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { TrendingUp, Lock, Mail, User, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { supabase } from '@/lib/supabase'
 
 export default function Register() {
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -32,16 +34,30 @@ export default function Register() {
 
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+          },
+        },
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Registration failed')
+      if (authError) throw new Error(authError.message)
+      if (!data.session) {
+        // Email confirmation may be required
+        setError('Check your email to confirm your account')
+        setLoading(false)
+        return
+      }
 
-      setAuth(data.access_token, data.username)
+      setAuth(
+        data.session.access_token,
+        data.user!.id,
+        username,
+        email
+      )
       navigate('/')
     } catch (err: any) {
       setError(err.message)
@@ -79,6 +95,23 @@ export default function Register() {
                   placeholder="Choose a username"
                   required
                   minLength={3}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+                Email
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-[#0a0a0f] border border-[#2a2a35] rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all"
+                  placeholder="you@example.com"
+                  required
                 />
               </div>
             </div>

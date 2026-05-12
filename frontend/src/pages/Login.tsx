@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { TrendingUp, Lock, User, Eye, EyeOff } from 'lucide-react'
+import { TrendingUp, Lock, Mail, Eye, EyeOff, Github } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { supabase } from '@/lib/supabase'
 
 export default function Login() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
@@ -18,20 +19,41 @@ export default function Login() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       })
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Login failed')
+      if (authError) throw new Error(authError.message)
+      if (!data.session) throw new Error('No session returned')
 
-      setAuth(data.access_token, data.username)
+      setAuth(
+        data.session.access_token,
+        data.user!.id,
+        data.user!.user_metadata?.username || data.user!.email || '',
+        data.user!.email || ''
+      )
       navigate('/')
     } catch (err: any) {
       setError(err.message)
     } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGitHubLogin = async () => {
+    setError('')
+    setLoading(true)
+    try {
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      })
+      if (authError) throw new Error(authError.message)
+    } catch (err: any) {
+      setError(err.message)
       setLoading(false)
     }
   }
@@ -48,19 +70,35 @@ export default function Login() {
         </div>
 
         <div className="bg-[#16161f] rounded-2xl border border-[#2a2a35] p-6">
+          {/* GitHub OAuth */}
+          <button
+            onClick={handleGitHubLogin}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 bg-[#0a0a0f] border border-[#2a2a35] hover:border-gray-600 text-white font-medium py-2.5 rounded-xl transition-all duration-200 disabled:opacity-50 mb-4"
+          >
+            <Github className="w-4 h-4" />
+            Sign in with GitHub
+          </button>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-[#2a2a35]" />
+            <span className="text-xs text-gray-600">or with email</span>
+            <div className="flex-1 h-px bg-[#2a2a35]" />
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                Username
+                Email
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-[#0a0a0f] border border-[#2a2a35] rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all"
-                  placeholder="Username"
+                  placeholder="you@example.com"
                   required
                 />
               </div>
@@ -112,9 +150,6 @@ export default function Login() {
             >
               Create Account
             </Link>
-            <span className="text-xs text-gray-600">
-              Default: admin / admin
-            </span>
           </div>
         </div>
       </div>

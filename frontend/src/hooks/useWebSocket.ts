@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { WSMessage, Trade, DefenseStatus, Agent, Position, SwarmConsensus } from '@/types'
-import { useAuthStore } from '@/store/authStore'
+import { getAuthToken } from '@/lib/supabase'
 
 export function useWebSocket() {
   const [connected, setConnected] = useState(false)
@@ -12,10 +12,10 @@ export function useWebSocket() {
   const [consensus, setConsensus] = useState<SwarmConsensus | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
-  const { token } = useAuthStore()
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
+    const token = await getAuthToken()
     if (!token) return
 
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
