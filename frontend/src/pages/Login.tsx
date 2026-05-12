@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { TrendingUp, Lock, User, Eye, EyeOff } from 'lucide-react'
+import { TrendingUp, Lock, User, Eye, EyeOff, Chrome, Github } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 export default function Login() {
@@ -11,6 +11,20 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
+
+  // Handle OAuth callback token in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    const user = params.get('username')
+    if (token && user) {
+      localStorage.setItem('hedgeswarm_token', token)
+      setAuth(token, user, user, '')
+      // Clean URL
+      window.history.replaceState({}, '', '/')
+      navigate('/')
+    }
+  }, [navigate, setAuth])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,6 +58,23 @@ export default function Login() {
     }
   }
 
+  const handleOAuth = async (provider: string) => {
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/auth/oauth/${provider}`)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.detail || `${provider} login not configured`)
+      }
+      const data = await res.json()
+      window.location.href = data.auth_url
+    } catch (err: any) {
+      setError(err.message)
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -56,6 +87,45 @@ export default function Login() {
         </div>
 
         <div className="bg-[#16161f] rounded-2xl border border-[#2a2a35] p-6">
+          {/* Social Login */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <button
+              onClick={() => handleOAuth('google')}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 bg-[#0a0a0f] border border-[#2a2a35] hover:border-gray-600 text-white py-2.5 rounded-xl transition-all duration-200 disabled:opacity-50"
+              title="Sign in with Google"
+            >
+              <Chrome className="w-4 h-4 text-red-400" />
+              <span className="text-xs">Google</span>
+            </button>
+            <button
+              onClick={() => handleOAuth('github')}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 bg-[#0a0a0f] border border-[#2a2a35] hover:border-gray-600 text-white py-2.5 rounded-xl transition-all duration-200 disabled:opacity-50"
+              title="Sign in with GitHub"
+            >
+              <Github className="w-4 h-4" />
+              <span className="text-xs">GitHub</span>
+            </button>
+            <button
+              onClick={() => handleOAuth('facebook')}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 bg-[#0a0a0f] border border-[#2a2a35] hover:border-gray-600 text-white py-2.5 rounded-xl transition-all duration-200 disabled:opacity-50"
+              title="Sign in with Facebook"
+            >
+              <svg className="w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+              <span className="text-xs">Facebook</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-[#2a2a35]" />
+            <span className="text-xs text-gray-600">or with username</span>
+            <div className="flex-1 h-px bg-[#2a2a35]" />
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">

@@ -32,6 +32,7 @@ from jose import JWTError, jwt
 from loguru import logger
 import bcrypt
 from pydantic import BaseModel, Field
+import httpx
 
 from config import settings
 
@@ -47,6 +48,36 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=Fals
 DEFAULT_USER = os.getenv("ADMIN_USER", "admin")
 _DEFAULT_PLAIN_PASS = os.getenv("ADMIN_PASSWORD", "admin")
 DEFAULT_PASS_HASH = bcrypt.hashpw(_DEFAULT_PLAIN_PASS.encode(), bcrypt.gensalt()).decode()
+
+# ── OAuth Config ────────────────────────────────────────────────────────────
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+OAUTH_CONFIG = {
+    "google": {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
+        "scope": "openid email profile",
+    },
+    "github": {
+        "client_id": os.getenv("GITHUB_CLIENT_ID", ""),
+        "client_secret": os.getenv("GITHUB_CLIENT_SECRET", ""),
+        "auth_url": "https://github.com/login/oauth/authorize",
+        "token_url": "https://github.com/login/oauth/access_token",
+        "userinfo_url": "https://api.github.com/user",
+        "scope": "user:email",
+    },
+    "facebook": {
+        "client_id": os.getenv("FACEBOOK_CLIENT_ID", ""),
+        "client_secret": os.getenv("FACEBOOK_CLIENT_SECRET", ""),
+        "auth_url": "https://www.facebook.com/v18.0/dialog/oauth",
+        "token_url": "https://graph.facebook.com/v18.0/oauth/access_token",
+        "userinfo_url": "https://graph.facebook.com/me",
+        "scope": "email,public_profile",
+    },
+}
 
 
 class Token(BaseModel):
@@ -840,6 +871,185 @@ async def register(payload: RegisterPayload):
 @app.get("/api/auth/me")
 async def read_users_me(user: str = Depends(require_auth)):
     return {"username": user}
+
+
+# ── OAuth ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/auth/oauth/{provider}")
+async def oauth_login(provider: str, redirect_uri: Optional[str] = None):
+    """Return the OAuth authorization URL for the given provider."""
+    config = OAUTH_CONFIG.get(provider)
+    if not config or not config["client_id"]:
+        raise HTTPException(status_code=400, detail=f"OAuth provider '{provider}' not configured")
+
+    # Build callback URL (backend receives the callback)
+    callback_url = f"{os.getenv('API_BASE_URL', 'http://localhost:3003')}/api/auth/oauth/{provider}/callback"
+
+    # Build auth URL
+    if provider == "google":
+        auth_url = (
+            f"{config['auth_url']}"
+            f"?client_id={config['client_id']}"
+            f"&redirect_uri={callback_url}"
+            f"&response_type=code"
+            f"&scope={config['scope']}"
+            f"&access_type=offline"
+        )
+    elif provider == "github":
+        auth_url = (
+            f"{config['auth_url']}"
+            f"?client_id={config['client_id']}"
+            f"&redirect_uri={callback_url}"
+            f"&scope={config['scope']}"
+        )
+    elif provider == "facebook":
+        auth_url = (
+            f"{config['auth_url']}"
+            f"?client_id={config['client_id']}"
+            f"&redirect_uri={callback_url}"
+            f"&scope={config['scope']}"
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
+
+    return {"auth_url": auth_url}
+
+
+@app.get("/api/auth/oauth/{provider}/callback")
+async def oauth_callback(provider: str, code: str, error: Optional[str] = None):
+    """Handle OAuth callback from provider."""
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+
+    config = OAUTH_CONFIG.get(provider)
+    if not config or not config["client_id"]:
+        raise HTTPException(status_code=400, detail=f"OAuth provider '{provider}' not configured")
+
+    callback_url = f"{os.getenv('API_BASE_URL', 'http://localhost:3003')}/api/auth/oauth/{provider}/callback"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Exchange code for access token
+            if provider == "google":
+                token_resp = await client.post(
+                    config["token_url"],
+                    data={
+                        "code": code,
+                        "client_id": config["client_id"],
+                        "client_secret": config["client_secret"],
+                        "redirect_uri": callback_url,
+                        "grant_type": "authorization_code",
+                    },
+                )
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+
+                # 2. Fetch user info
+                user_resp = await client.get(
+                    config["userinfo_url"],
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                user_data = user_resp.json()
+                provider_user_id = user_data.get("sub")
+                email = user_data.get("email")
+                name = user_data.get("name") or email.split("@")[0] if email else f"google_{provider_user_id[:8]}"
+
+            elif provider == "github":
+                token_resp = await client.post(
+                    config["token_url"],
+                    data={
+                        "code": code,
+                        "client_id": config["client_id"],
+                        "client_secret": config["client_secret"],
+                        "redirect_uri": callback_url,
+                    },
+                    headers={"Accept": "application/json"},
+                )
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+
+                user_resp = await client.get(
+                    config["userinfo_url"],
+                    headers={
+                        "Authorization": f"token {access_token}",
+                        "Accept": "application/json",
+                    },
+                )
+                user_data = user_resp.json()
+                provider_user_id = str(user_data.get("id"))
+                email = user_data.get("email")
+                name = user_data.get("login") or user_data.get("name") or f"github_{provider_user_id[:8]}"
+
+            elif provider == "facebook":
+                token_resp = await client.get(
+                    config["token_url"],
+                    params={
+                        "code": code,
+                        "client_id": config["client_id"],
+                        "client_secret": config["client_secret"],
+                        "redirect_uri": callback_url,
+                    },
+                )
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+
+                user_resp = await client.get(
+                    config["userinfo_url"],
+                    params={
+                        "access_token": access_token,
+                        "fields": "id,name,email",
+                    },
+                )
+                user_data = user_resp.json()
+                provider_user_id = user_data.get("id")
+                email = user_data.get("email")
+                name = user_data.get("name") or f"fb_{provider_user_id[:8]}"
+
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported provider")
+
+        # 3. Create or find user in database
+        from memory_store import memory_store
+        await memory_store.initialize()
+
+        username = await memory_store.create_oauth_user(
+            provider=provider,
+            provider_user_id=provider_user_id,
+            username=name,
+            email=email,
+        )
+
+        # 4. Generate JWT and redirect to frontend
+        access_token = create_access_token(data={"sub": username})
+        frontend = redirect_uri or FRONTEND_URL
+        return HTMLResponse(
+            content=HTML_REDIRECT_TEMPLATE.format(frontend=frontend, token=access_token, username=username),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[OAuth] {provider} callback error: {e}")
+        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {str(e)}")
+
+
+HTML_REDIRECT_TEMPLATE = """<!DOCTYPE html>
+<html>
+<head><title>Authenticating...</title></head>
+<body>
+<script>
+  (function() {
+    var token = '{token}';
+    var username = '{username}';
+    var frontend = '{frontend}';
+    localStorage.setItem('hedgeswarm_token', token);
+    window.location.href = frontend + '/?token=' + encodeURIComponent(token) + '&username=' + encodeURIComponent(username);
+  })();
+</script>
+<p>Redirecting to app...</p>
+</body>
+</html>
+"""
 
 
 # ── Health ──────────────────────────────────────────────────────────────────

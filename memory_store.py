@@ -124,8 +124,24 @@ class UserRecord(Base):
     __tablename__ = "users"
 
     username     = Column(String, primary_key=True)
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class OAuthAccountRecord(Base):
+    __tablename__ = "oauth_accounts"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    provider        = Column(String, nullable=False)
+    provider_user_id = Column(String, nullable=False)
+    username        = Column(String, nullable=False)
+    email           = Column(String, nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+    # Unique constraint on provider + provider_user_id
+    __table_args__ = (
+        {'sqlite_autoincrement': True},
+    )
 
 
 class SystemSettingRecord(Base):
@@ -490,6 +506,41 @@ class MemoryStore:
         """Fetch a user by username."""
         async with self.async_session() as session:
             return await session.get(UserRecord, username)
+
+    async def create_oauth_user(self, provider: str, provider_user_id: str, username: str, email: Optional[str] = None) -> str:
+        """Create or link an OAuth user. Returns username."""
+        async with self.async_session() as session:
+            # Check if this OAuth account already exists
+            result = await session.execute(
+                select(OAuthAccountRecord)
+                .where(OAuthAccountRecord.provider == provider)
+                .where(OAuthAccountRecord.provider_user_id == provider_user_id)
+            )
+            existing_oauth = result.scalar_one_or_none()
+            if existing_oauth:
+                return existing_oauth.username
+
+            # Check if username is taken
+            existing_user = await session.get(UserRecord, username)
+            if existing_user:
+                # Generate a unique username
+                base = username
+                counter = 1
+                while existing_user:
+                    username = f"{base}_{counter}"
+                    existing_user = await session.get(UserRecord, username)
+                    counter += 1
+
+            # Create user without password
+            session.add(UserRecord(username=username, password_hash=None))
+            session.add(OAuthAccountRecord(
+                provider=provider,
+                provider_user_id=provider_user_id,
+                username=username,
+                email=email,
+            ))
+            await session.commit()
+            return username
 
     def _setting_key(self, user_id: str, key: str) -> str:
         """Namespace a setting key with user_id to enforce isolation."""
