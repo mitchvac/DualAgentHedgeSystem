@@ -10,6 +10,7 @@ import {
   PieChart,
   Activity,
   Trophy,
+  Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSystemStatus } from '@/hooks/useApi'
@@ -23,6 +24,7 @@ const navItems = [
   { icon: Bot, label: 'Agents', path: '/agents', tooltip: 'Live agent swarm status, consensus scores, and agent roster' },
   { icon: Trophy, label: 'Leaderboard', path: '/leaderboard', tooltip: 'Per-agent win/loss tracking and prediction accuracy by role' },
   { icon: Monitor, label: 'Exchange', path: '/exchange-monitor', tooltip: 'Exchange health, order book depth, and balance monitoring' },
+  { icon: Wallet, label: 'Wallet', path: '/wallet', tooltip: 'Connect crypto wallet, view balances, and fund your trading account' },
   { icon: Settings, label: 'Settings', path: '/settings', tooltip: 'Risk limits, agent counts, watchlist, and trading mode configuration' },
 ]
 

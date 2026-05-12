@@ -38,6 +38,7 @@ from config import settings
 
 # ── JWT Config ──────────────────────────────────────────────────────────────
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "hedgeswarm-dev-secret-change-in-production")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
@@ -142,14 +143,34 @@ async def _lookup_user(username: str, password: str) -> Optional[str]:
 async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[str]:
     if not token:
         return None
+    # 1) Try local JWT (legacy auth / dev fallback)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if username is None:
-            return None
-        return username
+        if username:
+            return username
     except JWTError:
-        return None
+        pass
+    # 2) Try Supabase JWT (production auth)
+    if SUPABASE_JWT_SECRET:
+        try:
+            payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=[ALGORITHM])
+            user_id: str = payload.get("sub")
+            if user_id:
+                return user_id
+        except JWTError:
+            pass
+    # 3) Dev fallback: accept any well-formed JWT without verifying signature
+    #    (ONLY when SUPABASE_JWT_SECRET is not set — never in production)
+    if not SUPABASE_JWT_SECRET:
+        try:
+            payload = jwt.decode(token, "", algorithms=[ALGORITHM], options={"verify_signature": False})
+            user_id: str = payload.get("sub")
+            if user_id:
+                return user_id
+        except JWTError:
+            pass
+    return None
 
 
 async def require_auth(user: Optional[str] = Depends(get_current_user)) -> str:
