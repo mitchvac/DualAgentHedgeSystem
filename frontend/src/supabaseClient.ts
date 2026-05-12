@@ -79,13 +79,15 @@ export async function getCurrentUser() {
 }
 
 export function getAuthToken(): string | null {
-  const client = getSupabaseClient();
-  // Access token from current session
-  const session = client.auth.getSession();
-  // Note: getSession is async; for synchronous access use localStorage
-  return localStorage.getItem('sb-' + new URL(SUPABASE_URL).hostname + '-auth-token')
-    ? JSON.parse(localStorage.getItem('sb-' + new URL(SUPABASE_URL).hostname + '-auth-token')!).access_token
-    : null;
+  // Synchronous access via localStorage (Supabase stores session here)
+  const key = 'sb-' + new URL(SUPABASE_URL).hostname + '-auth-token';
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw).access_token;
+  } catch {
+    return null;
+  }
 }
 
 // ── Auth State Listener ───────────────────────────────────────────────────────

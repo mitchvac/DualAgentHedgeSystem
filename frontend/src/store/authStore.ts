@@ -31,7 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   init: async () => {
     // Listen to auth state changes
-    supabase.auth.onAuthStateChange((event, session) => {
+    supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         set({
           token: session.access_token,

@@ -54,7 +54,7 @@ export function useWebSocket() {
     ws.onerror = () => {
       ws.close()
     }
-  }, [token])
+  }, [])
 
   const send = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
