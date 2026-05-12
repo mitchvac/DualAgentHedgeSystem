@@ -1,0 +1,68 @@
+# ============================================================
+# .env.example  —  Copy to .env and fill in your real keys
+# NEVER commit your real .env to version control
+# ============================================================
+
+# ── Paper / live trading toggle ─────────────────────────────
+PAPER_TRADING=true
+
+# ── LLM providers ───────────────────────────────────────────
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GROK_API_KEY=xai-...
+
+# ── Social & on-chain data ───────────────────────────────────
+TWITTER_BEARER_TOKEN=AAAA...
+LUNARCRUSH_API_KEY=...
+GLASSNODE_API_KEY=...
+COINGLASS_API_KEY=...
+
+# ── Bybit (primary long exchange) ───────────────────────────
+BYBIT_API_KEY=...
+BYBIT_API_SECRET=...
+BYBIT_TESTNET=true
+
+# ── OKX (primary short exchange) ────────────────────────────
+OKX_API_KEY=...
+OKX_API_SECRET=...
+OKX_API_PASSPHRASE=...
+OKX_TESTNET=true
+
+# ── Binance (optional 3rd exchange) ─────────────────────────
+BINANCE_API_KEY=...
+BINANCE_API_SECRET=...
+BINANCE_TESTNET=true
+
+# ── Exchange routing ─────────────────────────────────────────
+LONG_EXCHANGE_ID=bybit
+SHORT_EXCHANGE_ID=okx
+# Set true to run both legs on the same exchange in hedge mode
+SAME_EXCHANGE_HEDGE_MODE=false
+
+# ── Risk limits ──────────────────────────────────────────────
+MAX_RISK_PER_PACKAGE_PCT=0.5
+MAX_DAILY_DRAWDOWN_PCT=3.0
+DEFAULT_LEVERAGE=5
+MAX_LEVERAGE=20
+STOP_LOSS_PCT=2.0
+TAKE_PROFIT_PCT=4.0
+TRAILING_STOP_PCT=1.5
+
+# ── Swarm tuning ─────────────────────────────────────────────
+MIN_CONSENSUS_SCORE=0.65
+MIN_VOLATILITY_PERCENTILE=60.0
+SIGNAL_REFRESH_SECONDS=30
+
+# ── Watchlist (colon-separated) ──────────────────────────────
+WATCHLIST=BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT
+
+# ── Dashboard ────────────────────────────────────────────────
+DASHBOARD_HOST=0.0.0.0
+DASHBOARD_PORT=8501
+
+# ── Database ─────────────────────────────────────────────────
+DB_URL=sqlite+aiosqlite:///./data/trades.db
+CHROMA_PERSIST_DIR=./data/chroma
+
+# ── Logging ──────────────────────────────────────────────────
+LOG_LEVEL=INFO

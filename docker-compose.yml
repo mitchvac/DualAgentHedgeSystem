@@ -1,0 +1,76 @@
+version: "3.9"
+
+services:
+  # ── Full-Stack Server (Engine + API in one process) ───────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hedge-api
+    env_file: .env
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    command: ["python", "main_fullstack.py"]
+    networks:
+      - hedge-net
+
+  # ── React Frontend (nginx) ────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: hedge-frontend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    networks:
+      - hedge-net
+    depends_on:
+      - api
+
+  # ── Standalone Trading Engine (optional) ──────────────────
+  hedge-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hedge-engine
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    command: ["python", "main.py", "--paper"]
+    networks:
+      - hedge-net
+    profiles:
+      - engine-only
+
+  # ── Streamlit Dashboard (legacy) ──────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hedge-dashboard-legacy
+    env_file: .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    command: ["streamlit", "run", "dashboard.py",
+              "--server.port=8501",
+              "--server.headless=true",
+              "--server.address=0.0.0.0"]
+    networks:
+      - hedge-net
+    depends_on:
+      - api
+
+networks:
+  hedge-net:
+    driver: bridge
+
+volumes:
+  hedge-data:
