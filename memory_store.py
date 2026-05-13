@@ -144,6 +144,36 @@ class OAuthAccountRecord(Base):
     )
 
 
+class PaymentRecord(Base):
+    __tablename__ = "payments"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    tx_hash      = Column(String, unique=True, nullable=False)
+    username     = Column(String, nullable=False, index=True)
+    amount       = Column(Float, nullable=False)
+    currency     = Column(String, nullable=False)
+    months       = Column(Integer, default=1)
+    tier         = Column(String, default="monthly")
+    status       = Column(String, default="confirmed")
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = ({'sqlite_autoincrement': True},)
+
+
+class SubscriptionRecord(Base):
+    __tablename__ = "subscriptions"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    username     = Column(String, unique=True, nullable=False)
+    tier         = Column(String, default="free")
+    active       = Column(Boolean, default=True)
+    started_at   = Column(DateTime, default=datetime.utcnow)
+    expires_at   = Column(DateTime, nullable=True)
+    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = ({'sqlite_autoincrement': True},)
+
+
 class SystemSettingRecord(Base):
     __tablename__ = "system_settings"
 
@@ -541,6 +571,78 @@ class MemoryStore:
             ))
             await session.commit()
             return username
+
+    # ── Payments & Subscriptions ──────────────────────────────────────────────
+
+    async def get_payment_by_tx(self, tx_hash: str) -> Optional[PaymentRecord]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(PaymentRecord).where(PaymentRecord.tx_hash == tx_hash)
+            )
+            return result.scalar_one_or_none()
+
+    async def save_payment(self, tx_hash: str, username: str, amount: float, currency: str, months: int = 1, tier: str = "monthly") -> None:
+        async with self.async_session() as session:
+            session.add(PaymentRecord(
+                tx_hash=tx_hash,
+                username=username,
+                amount=amount,
+                currency=currency,
+                months=months,
+                tier=tier,
+            ))
+            await session.commit()
+
+    async def get_subscription(self, username: str) -> Optional[SubscriptionRecord]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(SubscriptionRecord).where(SubscriptionRecord.username == username)
+            )
+            return result.scalar_one_or_none()
+
+    async def activate_subscription(self, username: str, months: int = 1, tier: str = "monthly") -> None:
+        async with self.async_session() as session:
+            sub = await session.get(SubscriptionRecord, username)
+            now = datetime.utcnow()
+            if sub:
+                if sub.expires_at and sub.expires_at > now:
+                    sub.expires_at = sub.expires_at + timedelta(days=30 * months)
+                else:
+                    sub.expires_at = now + timedelta(days=30 * months)
+                    sub.started_at = now
+                sub.tier = tier
+                sub.active = True
+            else:
+                session.add(SubscriptionRecord(
+                    username=username,
+                    tier=tier,
+                    active=True,
+                    started_at=now,
+                    expires_at=now + timedelta(days=30 * months),
+                ))
+            await session.commit()
+
+    async def check_subscription_active(self, username: str) -> bool:
+        sub = await self.get_subscription(username)
+        if not sub:
+            return False
+        if not sub.active:
+            return False
+        if sub.expires_at and sub.expires_at < datetime.utcnow():
+            return False
+        return True
+
+    async def get_all_subscriptions(self) -> list[SubscriptionRecord]:
+        async with self.async_session() as session:
+            result = await session.execute(select(SubscriptionRecord))
+            return result.scalars().all()
+
+    async def get_all_payments(self) -> list[PaymentRecord]:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(PaymentRecord).order_by(PaymentRecord.created_at.desc())
+            )
+            return result.scalars().all()
 
     def _setting_key(self, user_id: str, key: str) -> str:
         """Namespace a setting key with user_id to enforce isolation."""

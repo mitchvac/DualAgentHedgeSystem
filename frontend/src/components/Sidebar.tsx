@@ -11,6 +11,7 @@ import {
   Activity,
   Trophy,
   Wallet,
+  CreditCard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSystemStatus } from '@/hooks/useApi'
@@ -25,6 +26,7 @@ const navItems = [
   { icon: Trophy, label: 'Leaderboard', path: '/leaderboard', tooltip: 'Per-agent win/loss tracking and prediction accuracy by role' },
   { icon: Monitor, label: 'Exchange', path: '/exchange-monitor', tooltip: 'Exchange health, order book depth, and balance monitoring' },
   { icon: Wallet, label: 'Wallet', path: '/wallet', tooltip: 'Connect crypto wallet, view balances, and fund your trading account' },
+  { icon: CreditCard, label: 'Billing', path: '/billing', tooltip: 'Subscription status and crypto payment options' },
   { icon: Settings, label: 'Settings', path: '/settings', tooltip: 'Risk limits, agent counts, watchlist, and trading mode configuration' },
 ]
 

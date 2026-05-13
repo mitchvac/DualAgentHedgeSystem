@@ -780,8 +780,17 @@ async def lifespan(app: FastAPI):
     logger.info("[API] Fullstack server starting")
     await _load_persisted_settings()
     task = asyncio.create_task(broadcaster_loop())
+    # Start crypto payment monitor for SaaS subscriptions
+    try:
+        from crypto_payments import subscription_monitor_loop
+        sub_task = asyncio.create_task(subscription_monitor_loop(interval_seconds=60))
+    except Exception as e:
+        logger.warning(f"[API] Could not start subscription monitor: {e}")
+        sub_task = None
     yield
     task.cancel()
+    if sub_task:
+        sub_task.cancel()
     logger.info("[API] Server stopped")
 
 
@@ -871,6 +880,91 @@ async def register(payload: RegisterPayload):
 @app.get("/api/auth/me")
 async def read_users_me(user: str = Depends(require_auth)):
     return {"username": user}
+
+
+# ── Subscription Middleware ─────────────────────────────────────────────────
+
+async def require_subscription(user: str = Depends(require_auth)) -> str:
+    """Raise 403 if user's subscription is expired or inactive. Admin is always exempt."""
+    if user == os.getenv("ADMIN_USER", "admin"):
+        return user
+    from memory_store import memory_store
+    await memory_store.initialize()
+    active = await memory_store.check_subscription_active(user)
+    if not active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Subscription required. Please purchase a plan to continue trading.",
+        )
+    return user
+
+
+@app.get("/api/billing")
+async def api_billing(user: str = Depends(require_auth)):
+    """Return current user's subscription + payment instructions."""
+    from memory_store import memory_store
+    from crypto_payments import format_payment_instructions
+    await memory_store.initialize()
+
+    sub = await memory_store.get_subscription(user)
+    instructions = format_payment_instructions(user)
+
+    return {
+        "subscription": {
+            "tier": sub.tier if sub else "free",
+            "active": sub.active if sub else False,
+            "expires_at": sub.expires_at.isoformat() if sub and sub.expires_at else None,
+        },
+        "payment_instructions": instructions,
+        "pricing": {
+            "monthly_xrp": 25.0,
+            "monthly_rlusd": 25.0,
+        },
+    }
+
+
+@app.get("/api/admin/billing")
+async def api_admin_billing(user: str = Depends(require_auth)):
+    """Admin only: view all subscriptions and payments."""
+    if user != os.getenv("ADMIN_USER", "admin"):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    from memory_store import memory_store
+    await memory_store.initialize()
+
+    subs = await memory_store.get_all_subscriptions()
+    payments = await memory_store.get_all_payments()
+
+    total_revenue_xrp = sum(p.amount for p in payments if p.currency == "XRP")
+    total_revenue_rlusd = sum(p.amount for p in payments if p.currency == "RLUSD")
+
+    return {
+        "total_users": len(subs),
+        "total_payments": len(payments),
+        "total_revenue_xrp": total_revenue_xrp,
+        "total_revenue_rlusd": total_revenue_rlusd,
+        "subscriptions": [
+            {
+                "username": s.username,
+                "tier": s.tier,
+                "active": s.active,
+                "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            }
+            for s in subs
+        ],
+        "payments": [
+            {
+                "tx_hash": p.tx_hash,
+                "username": p.username,
+                "amount": p.amount,
+                "currency": p.currency,
+                "months": p.months,
+                "tier": p.tier,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in payments[:50]
+        ],
+    }
 
 
 # ── OAuth ───────────────────────────────────────────────────────────────────
@@ -1085,18 +1179,18 @@ async def api_status(user: Optional[str] = Depends(get_current_user)):
 
 
 @app.get("/api/trades")
-async def api_trades(limit: int = 100, user: str = Depends(require_auth)):
+async def api_trades(limit: int = 100, user: str = Depends(require_subscription)):
     return {"trades": await load_trades(user, limit)}
 
 
 @app.get("/api/positions")
-async def api_positions(user: str = Depends(require_auth)):
+async def api_positions(user: str = Depends(require_subscription)):
     """LIVE open positions from the running engine."""
     return {"positions": await load_positions(user)}
 
 
 @app.get("/api/equity")
-async def api_equity(user: str = Depends(require_auth)):
+async def api_equity(user: str = Depends(require_subscription)):
     """LIVE account equity from the exchange."""
     return {"equity_usdt": await load_equity(user), "timestamp": datetime.utcnow().isoformat()}
 
@@ -1305,7 +1399,7 @@ async def api_exchange_order(
 
 
 @app.get("/api/agents")
-async def api_agents(user: str = Depends(require_auth)):
+async def api_agents(user: str = Depends(require_subscription)):
     return {"agents": await load_agents()}
 
 
@@ -1325,7 +1419,7 @@ async def api_agents_diagnostic(user: str = Depends(require_auth)):
 
 
 @app.get("/api/swarm/consensus")
-async def api_swarm_consensus(user: str = Depends(require_auth)):
+async def api_swarm_consensus(user: str = Depends(require_subscription)):
     """Return the latest swarm consensus evaluation (direction, confidence, signal)."""
     from orchestrator import get_global_orchestrator
     orch = get_global_orchestrator()
@@ -1357,12 +1451,12 @@ async def api_swarm_consensus(user: str = Depends(require_auth)):
 
 
 @app.get("/api/defense")
-async def api_defense(user: str = Depends(require_auth)):
+async def api_defense(user: str = Depends(require_subscription)):
     return {"defense": await load_defense()}
 
 
 @app.get("/api/analytics")
-async def api_analytics(user: str = Depends(require_auth)):
+async def api_analytics(user: str = Depends(require_subscription)):
     return await load_analytics(user)
 
 
@@ -1466,7 +1560,7 @@ async def api_agents_accuracy(days: int = 30, user: str = Depends(require_auth))
 
 
 @app.get("/api/risk")
-async def api_risk(user: str = Depends(require_auth)):
+async def api_risk(user: str = Depends(require_subscription)):
     """Risk dashboard: exposure, drawdown, margin scoped to user."""
     from orchestrator import get_global_orchestrator
     from risk_manager import daily_tracker
@@ -1652,7 +1746,7 @@ async def api_delete_exchange(exchange_id: str, user: str = Depends(require_auth
 
 
 @app.post("/api/command")
-async def api_command(cmd: CommandPayload, user: str = Depends(require_auth)):
+async def api_command(cmd: CommandPayload, user: str = Depends(require_subscription)):
     # Verified: CommandPayload validates command length and structure
     cmd_path = settings.data_dir / "command_queue.json"
     try:

@@ -10,6 +10,7 @@ import Leaderboard from './pages/Leaderboard'
 import ExchangeMonitor from './pages/ExchangeMonitor'
 import Settings from './pages/Settings'
 import Wallet from './pages/Wallet'
+import Billing from './pages/Billing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import { useAuthStore } from './store/authStore'
@@ -46,6 +47,7 @@ export default function App() {
                   <Route path="/leaderboard" element={<Leaderboard />} />
                   <Route path="/exchange-monitor" element={<ExchangeMonitor />} />
                   <Route path="/wallet" element={<Wallet />} />
+                  <Route path="/billing" element={<Billing />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </Layout>
